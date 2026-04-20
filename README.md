@@ -104,6 +104,21 @@ Traffic is separated into dedicated VLANs to:
 
 ---
 
+## 📁 Documentation
+
+Detailed writeups for each component of the lab:
+
+| Document | Description |
+|---|---|
+| [01 — Proxmox Setup](docs/01-proxmox-setup.md) | Hypervisor installation and network bridge configuration |
+| [02 — pfSense Setup](docs/02-pfsense-setup.md) | Firewall and router initial configuration |
+| [03 — VLAN Segmentation](docs/03-vlan-segmentation.md) | 802.1Q trunk setup and VLAN design implementation |
+| [04 — Firewall Policy](docs/04-firewall-policy.md) | Zone-based firewall rules and inter-VLAN policy |
+| [05 — Lessons Learned](docs/05-lessons-learned.md) | Reflections on what broke, what I fixed, and what I'd do differently |
+| [06 — SSH Hardening](docs/06-ssh-hardening.md) | Replacing password auth with public key authentication on pfSense |
+
+---
+
 ## 💡 Why This Project
 
 This lab is designed to turn theory into **practical engineering experience** by building and troubleshooting real infrastructure.
