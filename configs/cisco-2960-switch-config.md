@@ -85,11 +85,12 @@ SWITCH(config-if)#exit
 
 **Configuration screenshot:**
 
-![Fa0/1 Trunk Configuration](../evidence/cisco-fa01-trunk-config.png)
+![Fa0/1 Trunk Configuration](<img width="752" height="155" alt="cisco-fa01-trunk-config" src="https://github.com/user-attachments/assets/f1771ced-cf4e-47bf-b905-ab59c6403a92" />
+)
 
 **Trunk verification:**
 
-![Trunk Verification](../evidence/cisco-trunk-verify.png)
+![Trunk Verification](<img width="750" height="146" alt="cisco-trunk-verify" src="https://github.com/user-attachments/assets/395010f2-593a-4a5a-99d7-e4d8e0e96a78" />)
 
 ---
 
@@ -110,7 +111,7 @@ SWITCH(config-if)#exit
 
 **Configuration screenshot:**
 
-![Gi0/2 Access Port Config](../evidence/cisco-gi02-access-config.png)
+![Gi0/2 Access Port Config](<img width="1479" height="483" alt="cisco-gi02-access-config" src="https://github.com/user-attachments/assets/f3aee5e1-be44-4abc-9551-796d2752d880" />)
 
 ---
 
@@ -161,19 +162,19 @@ This eliminated the Fast Ethernet bottleneck and better reflects enterprise-grad
 
 Confirms all VLANs are created, named correctly, and active.
 
-![VLAN Brief](../evidence/cisco-vlan-brief.png)
+![VLAN Brief](<img width="738" height="296" alt="cisco-vlan-brief" src="https://github.com/user-attachments/assets/4718404d-95df-4bec-af22-bd1e97b6700b" />)
 
 ### Interface Status — `do sh int status`
 
 Confirms port assignments, VLAN membership, duplex, speed, and connection status.
 
-![Interface Status](../evidence/cisco-int-status.png)
+![Interface Status](<img width="752" height="584" alt="cisco-int-status" src="https://github.com/user-attachments/assets/78eef069-f498-4751-8c32-9b71be717011" />)
 
 ### Trunk Status — `do sh int trunk`
 
 Confirms `Fa0/1` is trunking with 802.1Q encapsulation, native VLAN 99, and all VLANs active and forwarding.
 
-![Trunk Status — Fa0/1](../evidence/cisco-fa01-trunk.png)
+![Trunk Status — Fa0/1](<img width="750" height="146" alt="cisco-trunk-verify" src="https://github.com/user-attachments/assets/e419137b-4115-4af7-8801-72310eb9b3d1" />)
 
 ---
 
