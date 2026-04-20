@@ -6,18 +6,18 @@ Built a self-hosted enterprise-style home lab using Proxmox, pfSense, and a Cisc
 This project applies CCNA-level networking concepts in a live production-style environment rather than simulations, focusing on VLAN segmentation, firewall policy enforcement, management isolation, and network security hardening.
 <br>
 <h2>Technologies Used</h2>
-<li>Proxmox VE
-pfSense Community Edition
-Cisco Catalyst 2960 Switch
-Ubuntu Server
-VLANs (802.1Q)
-SSH
-DNS Resolver
-Firewall Rules
-DHCP
-NAT
-Linux CLI Administration
-</li>
+<li>Proxmox VE</li>
+<li>pfSense Community Edition</li>
+<li>Cisco Catalyst 2960 Switch</li>
+<li>Ubuntu Server</li>
+<li>VLANs (802.1Q)</li>
+<li>SSH</li>
+<li>DNS Resolver</li>
+<li>Firewall Rules</li>
+<li>DHCP</li>
+<li>NAT</li>
+<li>Linux CLI Administration</li>
+
 <br>
 <h2>Network Architecture</h2>
 <br>
@@ -26,45 +26,41 @@ pfSense operates as the central router and firewall, connected to the Cisco Cata
 Traffic is separated into dedicated VLANs to enforce security boundaries, reduce attack surface, and isolate trusted devices from user, IoT, and management networks.
 <br>
 <h2>VLAN Design</h2>
-<li>
-VLAN	Purpose	Subnet <br>
-VLAN 10	Admin Devices	192.168.10.0/24 <br>
-VLAN 20	Servers / Lab	192.168.20.0/24 <br>
-VLAN 30	IoT Devices	192.168.30.0/24 <br>
-VLAN 40	Users / Wi-Fi Clients	192.168.40.0/24 <br>
-VLAN 99	Management Network	192.168.99.0/24 <br>
-</li>
-<h2>Security Design</h2>
 
+<li>VLAN	Purpose	Subnet </li>
+<li>VLAN 10	Admin Devices	192.168.10.0/24 </li>
+<li>VLAN 20	Servers / Lab	192.168.20.0/24 </li>
+<li>VLAN 30	IoT Devices	192.168.30.0/24 </li>
+<li>VLAN 40	Users / Wi-Fi Clients	192.168.40.0/24 </li>
+<li>VLAN 99	Management Network	192.168.99.0/24 </li>
+<br>
+<h2>Security Design</h2>
 Implemented security controls include:
-<li>
-Inter-VLAN isolation using least-privilege firewall rules
-Restricted pfSense GUI and SSH access
-Management-plane isolation using VLAN 99
-DNS Resolver access control lists
-DNSSEC enabled
-SSH key-based authentication (Public Key Only)
-Reduced unnecessary service exposure
-</li>
+<li>Inter-VLAN isolation using least-privilege firewall rules</li>
+<li>Restricted pfSense GUI and SSH access</li>
+<li>Management-plane isolation using VLAN 99</li>
+<li>DNS Resolver access control lists</li>
+<li>DNSSEC enabled</li>
+<li>SSH key-based authentication (Public Key Only)</li>
+<li>Reduced unnecessary service exposure</li>
 <br>
 <h2>Troubleshooting Experience</h2>
 
 Real-world issues solved during the build:
-<li>
-DHCP failures (missing WAN lease)
-Interface link failures (NO-CARRIER)
-Proxmox bridge misconfiguration
-Single-NIC routing bottlenecks
-Firewall rule order conflicts
-VLAN management access restrictions
-Current Focus
-Final pfSense hardening
-VPN deployment (WireGuard / OpenVPN)
-IDS/IPS deployment (Suricata / Snort)
-Monitoring and logging
-Dedicated second NIC implementation
-Network Diagrams
-</li>
+
+<li>DHCP failures (missing WAN lease)</li>
+<li>Interface link failures (NO-CARRIER)</li>
+<li>Proxmox bridge misconfiguration</li>
+<li>Single-NIC routing bottlenecks</li>
+<li>Firewall rule order conflicts</li>
+<li>VLAN management access restrictions</li>
+<li>Current Focus</li>
+<li>Final pfSense hardening</li>
+<li>VPN deployment (WireGuard / OpenVPN)</li>
+<li>IDS/IPS deployment (Suricata / Snort)</li>
+<li>Monitoring and logging</li>
+<li>Dedicated second NIC implementation</li>
+<li>Network Diagrams</li>
 (Diagrams will be added here)
 
 <h2>Why This Project</h2>
