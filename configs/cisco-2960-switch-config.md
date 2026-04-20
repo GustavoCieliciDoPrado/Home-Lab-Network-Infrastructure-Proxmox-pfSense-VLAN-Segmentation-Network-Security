@@ -173,7 +173,7 @@ Confirms port assignments, VLAN membership, duplex, speed, and connection status
 
 Confirms `Fa0/1` is trunking with 802.1Q encapsulation, native VLAN 99, and all VLANs active and forwarding.
 
-![Trunk Status — Fa0/1](../evidence/cisco-fa01-trunk-verify.png)
+![Trunk Status — Fa0/1](../evidence/cisco-fa01-trunk.png)
 
 ---
 
