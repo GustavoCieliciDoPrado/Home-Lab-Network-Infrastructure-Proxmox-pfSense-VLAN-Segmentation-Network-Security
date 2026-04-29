@@ -16,10 +16,12 @@ The goal is continuous improvement, practical troubleshooting, and applying real
 | Phase 4 | Troubleshooting & Management Recovery | ✅ Complete |
 | Phase 5 | Dual NIC Architecture Upgrade | ✅ Complete |
 | Phase 6 | Security Hardening | ✅ Complete |
-| Phase 7 | VPN Deployment | 🔄 Planned |
-| Phase 8 | IDS / IPS | 🔄 Planned |
-| Phase 9 | Monitoring and Logging | 🔄 Planned |
-| Phase 10 | Hardware Improvements | 🔄 Planned |
+| Phase 7 | Edge Routing Migration & ISP Architecture Redesign | ✅ Complete |
+| Phase 8 | WireGuard VPN Deployment | ✅ Complete |
+| Phase 9 | IDS / IPS | 🔄 Planned |
+| Phase 10 | Monitoring and Logging | 🔄 Planned |
+| Phase 11 | Dynamic DNS | 🔄 Planned |
+| Phase 12 | Hardware Improvements | 🔄 Planned |
 
 ---
 
@@ -50,11 +52,11 @@ The goal is continuous improvement, practical troubleshooting, and applying real
 
 | VLAN | Name | Subnet |
 |---|---|---|
-| VLAN 10 | Admin | `192.168.10.0/24` |
-| VLAN 20 | Lab | `192.168.20.0/24` |
-| VLAN 30 | IoT | `192.168.30.0/24` |
-| VLAN 40 | Users | `192.168.40.0/24` |
-| VLAN 99 | Management | `192.168.99.0/24` |
+| **VLAN 10** | Admin | `192.168.10.0/24` |
+| **VLAN 20** | Lab | `192.168.20.0/24` |
+| **VLAN 30** | IoT | `192.168.30.0/24` |
+| **VLAN 40** | Users | `192.168.40.0/24` |
+| **VLAN 99** | Management | `192.168.99.0/24` |
 
 - Configured access ports and trunk links on the 2960
 - Built initial switch-to-Proxmox trunk design
@@ -99,7 +101,7 @@ This phase was unplanned but became one of the most valuable parts of the projec
 | pfSense WebGUI login loop | Browser session corruption after GUI protocol and VLAN changes | Cleared browser site data and restarted GUI services |
 | SSH hardening validation | Password login intentionally disabled | Verified successful public-key-only authentication |
 
-> 💡 **Key insight from this phase:** Layer 1 physical connectivity errors frequently present as Layer 2 or Layer 3 failures. Always verify the physical layer before diagnosing routing or firewall issues. Browser state can also mimic authentication failures — clear application state before assuming infrastructure is broken.
+> 💡 **Key insight:** Layer 1 physical connectivity errors frequently present as Layer 2 or Layer 3 failures. Always verify the physical layer before diagnosing routing or firewall issues. Browser state can also mimic authentication failures — clear application state before assuming infrastructure is broken.
 
 ### Outcome
 
@@ -189,28 +191,77 @@ This phase was unplanned but became one of the most valuable parts of the projec
 
 ---
 
-## 🔄 Current Focus — Final pfSense Hardening
+## ✅ Phase 7 — Edge Routing Migration & ISP Architecture Redesign
+`April 2026`
 
-- [ ] Final firewall policy refinement
+This phase eliminated the ISP double-NAT constraint and moved pfSense to the true network edge — a prerequisite for stable VPN deployment and proper remote access.
+
+### Completed
+
+- Removed ISP router from the routing path entirely
+- Connected pfSense WAN interface directly to Openreach ONT via PPPoE
+- Configured pfSense as the sole edge router, firewall, DHCP server, and future VPN endpoint
+- Converted EE Hub from router to Wi-Fi access point only (VLAN 40)
+- Eliminated double-NAT and resolved associated routing instability
+
+### Issues Resolved During Migration
+
+| Issue | Cause | Resolution |
+|---|---|---|
+| WireGuard handshake failures | ISP router intercepting and NATting VPN traffic | Moved pfSense to edge, removing ISP router from path |
+| Double-NAT routing conflicts | pfSense sitting behind ISP router | Direct PPPoE connection to ONT |
+| VLAN 40 Wi-Fi disruption | EE Hub role change during migration | Reconfigured as access point, preserved household connectivity |
+| FastEthernet trunk bottleneck | Critical trunk running on `Fa0/1` (100Mbps) | Migrated trunk to GigabitEthernet uplink |
+| CRC errors and packet corruption | Physical fault on `Fa0/1` port | Diagnosed via `show interfaces`, moved to clean Gi port |
+
+> 💡 **Key insight:** ISP routers fundamentally block certain traffic types including VPN handshakes. Moving to edge routing is not just a performance improvement — it removes an entire category of constraints that cannot be worked around in software.
+
+### Outcome
+
+> pfSense now operates as the true network edge. All routing, NAT, firewall enforcement, and VPN termination is handled directly by pfSense with no upstream interference.
+
+---
+
+## ✅ Phase 8 — WireGuard VPN Deployment
+`April 2026`
+
+### Completed
+
+- Installed and configured WireGuard VPN server on pfSense
+- Generated server keypair and configured WireGuard interface and tunnel addressing
+- Added MacBook as a remote peer with dedicated allowed IPs
+- Configured pfSense firewall rules to permit WireGuard tunnel traffic
+- Configured routing to allow remote peer access to management VLAN and infrastructure
+
+### Validation
+
+| Test | Method | Result |
+|---|---|---|
+| Tunnel establishment | WireGuard handshake confirmation | ✅ Successful |
+| Remote management access | SSH to Proxmox and pfSense over tunnel | ✅ Confirmed |
+| True external validation | Mobile hotspot — no local network involvement | ✅ Confirmed |
+| DNS resolution over tunnel | Internal hostname resolution via pfSense | ✅ Confirmed |
+
+> 💡 **Key insight:** VPN handshake failures that present as configuration issues are often caused by upstream NAT interference. Resolving the edge routing architecture in Phase 7 was a prerequisite for this phase to succeed.
+
+### Outcome
+
+> Secure remote administrative access to the full lab infrastructure is now operational and validated from an external network.
+
+---
+
+## 🔄 Current Focus
+
+- [ ] Final firewall policy refinement and rule cleanup
 - [ ] Administrative access review
-- [ ] Rule cleanup and validation
 - [ ] Management path verification
+- [ ] Dynamic DNS deployment
 
 ---
 
 ## 🗺️ Planned Phases
 
-### Phase 7 — VPN Deployment
-
-| Item | Detail |
-|---|---|
-| WireGuard | Primary VPN deployment target |
-| OpenVPN | Secondary evaluation |
-| Objective | Secure remote administrative access and management testing |
-
----
-
-### Phase 8 — IDS / IPS
+### Phase 9 — IDS / IPS
 
 | Item | Detail |
 |---|---|
@@ -220,29 +271,36 @@ This phase was unplanned but became one of the most valuable parts of the projec
 
 ---
 
-### Phase 9 — Monitoring and Logging
+### Phase 10 — Monitoring and Logging
 
 | Item | Detail |
 |---|---|
+| Grafana / Zabbix / LibreNMS | Traffic and performance monitoring across all VLANs |
 | Syslog centralisation | Aggregate logs from all network components |
-| Traffic monitoring | Visibility across all VLANs |
 | Alerting | Threshold-based notification setup |
 
 ---
 
-### Phase 10 — Hardware Improvements
+### Phase 11 — Dynamic DNS
 
 | Item | Detail |
 |---|---|
-| Backup automation | Scheduled Proxmox VM snapshots |
+| Objective | Maintain stable remote access regardless of ISP WAN IP changes |
+| Integration | pfSense DDNS client pointing to chosen provider |
+
+---
+
+### Phase 12 — Hardware Improvements
+
+| Item | Detail |
+|---|---|
+| Backup automation | Scheduled Proxmox VM snapshots and offsite backup |
 | DNS hardening | Further resolver hardening and DNSSEC validation |
 | Objective | Operational resilience and recovery planning |
 
 ---
 
 ## 🔧 Current State
-
-### Working
 
 | Component | Status |
 |---|---|
@@ -255,6 +313,9 @@ This phase was unplanned but became one of the most valuable parts of the projec
 | SSH public-key-only access | ✅ Enforced |
 | Firewall policy enforcement | ✅ Active |
 | Dual NIC WAN / LAN separation | ✅ Complete |
+| PPPoE edge routing | ✅ Complete |
+| EE Hub converted to access point | ✅ Complete |
+| WireGuard VPN | ✅ Operational |
 
 ---
 
@@ -264,26 +325,5 @@ This phase was unplanned but became one of the most valuable parts of the projec
 - **Layer 1 failures often appear as Layer 3 problems.** Physical verification prevents hours of wasted logical troubleshooting.
 - **Browser state can mimic authentication failures.** Clear application state before assuming infrastructure is broken.
 - **Additional hardware can simplify architecture more than software workarounds.** The dual NIC upgrade solved problems that configuration alone could not.
-- **Clean configuration discipline prevents future operational pain.** Document as you build — retroactive documentation misses context and intent.
-
----
-
-## 🏁 Long-Term Goal
-
-Build a production-style infrastructure lab that demonstrates practical skills across:
-
-| Discipline | Focus Area |
-|---|---|
-| Datacentre Operations | Hardware, virtualisation, physical infrastructure |
-| Network Engineering | Routing, switching, segmentation, VPN |
-| Systems Administration | Linux, Windows, service management |
-| Infrastructure Security | Firewall policy, hardening, IDS/IPS |
-| Enterprise Troubleshooting | Real failure diagnosis and recovery |
-
-> The lab now functions as a realistic infrastructure engineering platform rather than a basic virtualised test environment.
-
----
-
-<div align="center">
-<sub>Part of the <a href="README.md">Home Lab Network Infrastructure</a> project</sub>
-</div>
+- **ISP routers impose hidden constraints.** Moving to edge routing removes an entire class of problems — NAT traversal, VPN handshakes, and routing stability all improved immediately.
+- **Clean configuration discipline prevents future operational pain.** Document as you build — retroact
