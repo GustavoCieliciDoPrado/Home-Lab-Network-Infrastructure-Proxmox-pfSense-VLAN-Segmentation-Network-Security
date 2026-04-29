@@ -1,159 +1,127 @@
-# 🔥 Firewall Policy & Access Control
+# 🔥 Firewall Hardening
 
-This document outlines the firewall design used to control traffic between VLANs and enforce security boundaries across the home lab environment.
+This document covers the security hardening implemented within pfSense to reduce attack surface, enforce least-privilege access, and protect management infrastructure across the home lab.
 
-Rather than allowing unrestricted communication between all devices, pfSense was configured to:
-- Restrict unnecessary lateral movement
-- Isolate high-risk networks
-- Protect infrastructure services
-- Preserve administrative access
-- Enforce least-privilege communication
+Rather than simply establishing connectivity, pfSense was configured to:
+- Minimise unnecessary WAN exposure
+- Protect administrative services
+- Isolate low-trust devices from critical systems
+- Enforce least-privilege inter-VLAN access
+- Support secure remote administration via WireGuard
 
-This moves the environment from simple VLAN separation into intentional security architecture.
+This moves the environment from basic connectivity into a network with production-style security controls similar to real infrastructure environments.
 
 ---
 
 ## 📋 Table of Contents
 
-- [Design Objectives](#design-objectives)
-- [Security Model](#security-model)
-- [VLAN Security Zones](#vlan-security-zones)
-- [Core Policy Design](#core-policy-design)
-- [Zone-Based Firewall Policy Summary](#zone-based-firewall-policy-summary)
-- [DNS Security Policy](#dns-security-policy)
-- [Administrative Access Policy](#administrative-access-policy)
-- [Default Deny Enforcement](#default-deny-enforcement)
-- [Challenges Encountered](#challenges-encountered)
-- [Result](#result)
+- [Security Goals](#security-goals)
+- [WAN Exposure Review](#wan-exposure-review)
+- [WAN Firewall Policy](#wan-firewall-policy)
+- [VLAN Firewall Policy](#vlan-firewall-policy)
+- [Zone-Based Policy Summary](#zone-based-policy-summary)
+- [DNS Resolver Hardening](#dns-resolver-hardening)
+- [SSH Hardening](#ssh-hardening)
+- [Management Plane Protection](#management-plane-protection)
+- [WireGuard Security](#wireguard-security)
 - [Lessons Learned](#lessons-learned)
+- [Result](#result)
 
 ---
 
-## 🎯 Design Objectives
+## 🎯 Security Goals
 
 | Objective | Status |
 |---|---|
-| Restrict inter-VLAN communication | ✅ Complete |
-| Protect management interfaces | ✅ Complete |
-| Isolate IoT devices | ✅ Complete |
-| Preserve internet access where needed | ✅ Complete |
-| Centralise security policy enforcement | ✅ Complete |
+| Minimise unnecessary WAN exposure | ✅ Complete |
+| Protect administrative services | ✅ Complete |
+| Isolate low-trust devices from critical systems | ✅ Complete |
+| Enforce least-privilege inter-VLAN access | ✅ Complete |
+| Reduce attack surface | ✅ Complete |
+| Improve visibility and operational security | ✅ Complete |
+| Support secure remote administration via WireGuard | ✅ Complete |
 
 ---
 
-## 🧱 Security Model
+## 🌐 WAN Exposure Review
 
-### Default Principle — Deny by Default
+### Previous Risk
 
-Traffic is not trusted simply because it exists inside the network. All access must be **intentionally and explicitly allowed**.
+Before pfSense became the edge router, the ISP router handled internet-facing traffic and introduced unreliable forwarding, double NAT, and poor visibility. After migrating pfSense to the WAN edge, a full review of exposed services was required.
 
-| Principle | Detail |
+### Hardening Actions
+
+Services disabled or removed:
+
+| Service | Action |
 |---|---|
-| Default stance | Deny all traffic unless explicitly permitted |
-| Rule evaluation | Top-down — first match wins |
-| Trust model | Zero implicit trust between VLANs |
-| Enforcement point | All inter-VLAN traffic passes through pfSense |
+| Web management from untrusted networks | ❌ Removed |
+| Unused inbound services | ❌ Removed |
+| Unnecessary external-facing services | ❌ Removed |
 
-This follows standard enterprise security practice and prevents silent lateral movement between network segments.
-
-> ⚠️ **Rule order is critical.** A misplaced allow rule above a deny rule will bypass intended security controls. Every rule was placed deliberately with least-privilege in mind.
+Only required services remained exposed.
 
 ---
 
-## 🌐 VLAN Security Zones
+## 🔐 WAN Firewall Policy
 
-| VLAN | Name | Trust Level | Role |
-|---|---|---|---|
-| **VLAN 10** | Admin | ⭐ High Trust | Primary management and administration |
-| **VLAN 20** | Lab / Servers | 🔶 Medium Trust | Infrastructure services and testing |
-| **VLAN 30** | IoT | 🔴 Untrusted | Isolated untrusted endpoints |
-| **VLAN 40** | Users | 🔷 Semi-trusted | Daily-use client devices |
-| **VLAN 99** | Management | 🔒 Restricted | Network device management only |
+### Inbound Policy
 
-Each VLAN is treated as a separate trust boundary. All routing between them passes through pfSense for policy enforcement.
+| Approach | Detail |
+|---|---|
+| Default stance | Deny all inbound traffic |
+| Override | Allow only explicit requirements |
+
+| Service | Action |
+|---|---|
+| WireGuard VPN listener | ✅ Allowed |
+| Explicitly required administrative paths | ✅ Allowed |
+| Everything else | ❌ Denied |
+
+This follows least-privilege design — nothing is exposed unless there is a deliberate operational reason.
 
 ---
 
-## 🔐 Core Policy Design
+## 🧱 VLAN Firewall Policy
 
-### VLAN 10 — Admin *(High Trust)*
+### Security Model
 
-| Traffic | Direction | Action |
+Access between VLANs is controlled using explicit policy rather than open trust.
+
+| VLAN | Trust Level | Role |
 |---|---|---|
-| Internet access | Outbound | ✅ Allowed |
-| pfSense GUI | VLAN 10 → pfSense | ✅ Allowed |
-| Proxmox management | VLAN 10 → Proxmox | ✅ Allowed |
-| SSH administration | VLAN 10 → infrastructure | ✅ Allowed |
-| Switch management | VLAN 10 → VLAN 99 | ✅ Allowed |
-| Access to Lab / Servers | VLAN 10 → VLAN 20 | ✅ Allowed |
-| DNS | VLAN 10 → pfSense | ✅ Allowed |
+| **VLAN 10** | ⭐ High Trust | Administrative network |
+| **VLAN 20** | 🔶 Medium Trust | Lab / Servers |
+| **VLAN 30** | 🔴 Untrusted | IoT devices |
+| **VLAN 40** | 🔷 Semi-trusted | Users / Wi-Fi |
+| **VLAN 99** | 🔒 Restricted | Management plane |
 
-**Reason:** Trusted administrator devices require full visibility and control access. VLAN 10 is the primary operational network — access is broad but deliberate.
+### Rules Implemented
 
----
+**Blocked traffic:**
 
-### VLAN 20 — Lab / Servers *(Medium Trust)*
+| Source → Destination | Action |
+|---|---|
+| VLAN 30 → VLAN 10 | ❌ Blocked |
+| VLAN 30 → VLAN 99 | ❌ Blocked |
+| VLAN 40 → VLAN 10 | ❌ Blocked |
+| VLAN 40 → VLAN 99 | ❌ Blocked |
+| Non-admin → pfSense GUI | ❌ Blocked |
+| Non-admin → SSH management | ❌ Blocked |
 
-| Traffic | Direction | Action |
-|---|---|---|
-| Internet access | Outbound | ✅ Allowed |
-| Package updates / DNS | VLAN 20 → pfSense | ✅ Allowed |
-| Admin access inbound | VLAN 10 → VLAN 20 | ✅ Allowed |
-| Access to Admin network | VLAN 20 → VLAN 10 | ❌ Blocked |
-| Access to IoT | VLAN 20 → VLAN 30 | ❌ Blocked |
-| Access to Users | VLAN 20 → VLAN 40 | ❌ Blocked |
-| Access to Management | VLAN 20 → VLAN 99 | ❌ Blocked |
+**Controlled access:**
 
-**Reason:** Servers should be reachable from trusted admin devices but not broadly exposed. Lab VMs should not be able to pivot into management infrastructure.
+| Source → Destination | Action |
+|---|---|
+| VLAN 40 → VLAN 20 | ⚠️ HTTP/HTTPS only |
+| Approved management access | ✅ Trusted devices only |
+| Infrastructure access | ✅ Administrative systems only |
 
----
-
-### VLAN 30 — IoT *(Untrusted)*
-
-| Traffic | Direction | Action |
-|---|---|---|
-| Internet access | Outbound | ✅ Allowed |
-| DNS | VLAN 30 → pfSense only | ✅ Allowed |
-| Access to Admin | VLAN 30 → VLAN 10 | ❌ Blocked |
-| Access to Lab | VLAN 30 → VLAN 20 | ❌ Blocked |
-| Access to Users | VLAN 30 → VLAN 40 | ❌ Blocked |
-| Access to Management | VLAN 30 → VLAN 99 | ❌ Blocked |
-
-**Reason:** IoT devices are treated as fully untrusted endpoints. They frequently lack security patches and cannot be managed like trusted devices. Full isolation prevents a compromised IoT device from reaching any critical internal system.
+This prevents lateral movement and protects the control plane.
 
 ---
 
-### VLAN 40 — Users *(Semi-trusted)*
-
-| Traffic | Direction | Action |
-|---|---|---|
-| Internet access | Outbound — HTTP/HTTPS only | ✅ Allowed |
-| DNS | VLAN 40 → pfSense only | ✅ Allowed |
-| Access to Admin | VLAN 40 → VLAN 10 | ❌ Blocked |
-| Access to Lab | VLAN 40 → VLAN 20 | ⚠️ Limited — approved services only |
-| Access to IoT | VLAN 40 → VLAN 30 | ❌ Blocked |
-| Access to Management | VLAN 40 → VLAN 99 | ❌ Blocked |
-
-**Reason:** Daily-use client devices should remain productive without gaining unnecessary internal access. Internet is restricted to HTTP/HTTPS (ports 80/443) to reduce outbound exposure.
-
----
-
-### VLAN 99 — Management *(Restricted)*
-
-| Traffic | Direction | Action |
-|---|---|---|
-| Admin access inbound | VLAN 10 → VLAN 99 | ✅ Allowed |
-| Switch management | VLAN 99 internal | ✅ Allowed |
-| Access from Users | VLAN 40 → VLAN 99 | ❌ Blocked |
-| Access from IoT | VLAN 30 → VLAN 99 | ❌ Blocked |
-| Access from Lab | VLAN 20 → VLAN 99 | ❌ Blocked |
-| Internet access | Outbound | ❌ Blocked |
-
-**Reason:** The management plane must be completely isolated from user-facing networks. Only VLAN 10 (Admin) is permitted to reach management infrastructure. This mirrors enterprise out-of-band management design.
-
----
-
-## 📊 Zone-Based Firewall Policy Summary
+## 📊 Zone-Based Policy Summary
 
 | Source → Destination | VLAN 10 Admin | VLAN 20 Lab | VLAN 30 IoT | VLAN 40 Users | VLAN 99 Mgmt | Internet |
 |---|---|---|---|---|---|---|
@@ -165,91 +133,108 @@ Each VLAN is treated as a separate trust boundary. All routing between them pass
 
 > ⚠️ = Limited access to approved services only
 
-### Firewall Policy Diagram
-
-![Zone-Based Firewall Policy](../diagrams/ZB-Firewall_drawio.png)
+A zone-based firewall policy was implemented using pfSense VLAN interfaces to enforce least-privilege communication between network segments. Administrative systems retain secure access to infrastructure, while user and IoT VLANs are isolated from management services and sensitive systems. Access between VLANs is explicitly permitted only where operationally required, reducing attack surface and improving overall network security.
 
 ---
 
-## 🌐 DNS Security Policy
+## 🌐 DNS Resolver Hardening
 
 DNS was treated as a security control, not just a utility service.
 
 | Control | Detail |
 |---|---|
 | DNS Resolver | pfSense Unbound DNS |
+| Access Control Lists | Configured per VLAN |
 | DNSSEC | Enabled |
 | External DNS bypass | Blocked via firewall rules |
-| Per-VLAN ACLs | Configured — each VLAN restricted to pfSense resolver |
-| Purpose | Prevent DNS-based security boundary bypass |
+| Resolver access | Restricted to pfSense only |
+
+**Benefits:**
+
+- Trusted internal DNS resolution
+- Reduced abuse potential
+- Improved integrity of DNS responses
 
 Allowing devices to use external resolvers (e.g. `8.8.8.8`) bypasses internal DNS visibility and allows potential security boundary circumvention. Forcing all VLANs through the pfSense resolver preserves control and visibility.
 
 ---
 
-## 🔑 Administrative Access Policy
+## 🔑 SSH Hardening
 
-pfSense GUI and SSH access are restricted to the Admin VLAN only.
+Administrative access was hardened to eliminate password-based authentication.
 
-| Service | Permitted Source | Action |
-|---|---|---|
-| pfSense WebGUI | VLAN 10 only | ✅ Allowed |
-| SSH to pfSense | VLAN 10 only — key-based | ✅ Allowed |
-| SSH from other VLANs | All other VLANs | ❌ Blocked |
-| WebGUI from other VLANs | All other VLANs | ❌ Blocked |
+| Setting | Value |
+|---|---|
+| Authentication method | Public key only |
+| Password authentication | ❌ Disabled |
+| Permitted sources | VLAN 10 (Admin) only |
+
+**Benefits:**
+
+- Stronger administrative access control
+- Reduced brute-force exposure
+- Better operational security posture
 
 > 📄 Full SSH hardening details in [06 — SSH Hardening](06-ssh-hardening.md).
 
 ---
 
-## 🚫 Default Deny Enforcement
+## 🛡️ Management Plane Protection
 
-pfSense enforces a default deny rule at the bottom of every interface rule set.
+All management interfaces are restricted to trusted VLANs and approved devices only.
 
-| Setting | Value |
-|---|---|
-| Default rule | Block all — any source, any destination |
-| Logging | Enabled on default deny |
-| Scope | Applied per VLAN interface |
-| Override | Explicit allow rules above default deny only |
+| Service | Permitted Source | Action |
+|---|---|---|
+| pfSense WebGUI | VLAN 10 only | ✅ Allowed |
+| SSH to pfSense | VLAN 10 only — key-based | ✅ Allowed |
+| Switch management | VLAN 10 → VLAN 99 | ✅ Allowed |
+| Proxmox management | VLAN 10 only | ✅ Allowed |
+| Access from all other VLANs | Any management service | ❌ Blocked |
 
-Any traffic not explicitly permitted by a rule above the default deny is silently dropped. This means new devices added to the network have no implicit access to anything — access must be deliberately granted.
+This separates infrastructure control from normal user activity and mirrors enterprise out-of-band management design.
 
 ---
 
-## ⚠️ Challenges Encountered
+## 🔒 WireGuard Security
 
-| Issue | Cause | Resolution |
-|---|---|---|
-| Rule order conflicts | Allow rule placed above intended deny | Reviewed and reordered rules — most permissive rules moved below restrictive ones |
-| IoT internet access failing | Missing outbound NAT rule for VLAN 30 | Verified NAT scope included all VLAN subnets |
-| Admin locked out of pfSense GUI | Management access rule misconfigured | Corrected source interface on GUI allow rule |
-| DNS bypass not blocked | Firewall rule missing for outbound UDP/TCP 53 | Added explicit block rule for external DNS from all VLANs |
-| Users reaching Lab services | Overly broad allow rule on VLAN 40 | Tightened rule to specific destination IPs and ports only |
+WireGuard was deployed as the primary secure remote access method. Rather than exposing administrative services directly to the internet, all remote access is tunnelled through VPN first.
+
+```text
+Remote admin access
+→ VPN first
+→ Infrastructure access second
+```
+
+| Control | Detail |
+|---|---|
+| WAN listener | WireGuard only |
+| Direct admin exposure | ❌ None |
+| Remote access path | VPN → Admin VLAN → Infrastructure |
+
+This significantly reduces the external attack surface.
+
+---
+
+## ⚠️ Lessons Learned
+
+- **Security is architecture, not rules.** The biggest improvements came from correct VLAN design, proper trunking, management isolation, and removal of double NAT — not simply adding more firewall rules.
+- **Rule order matters more than rule content.** A correctly written allow rule in the wrong position will silently bypass intended security controls.
+- **DNS is a security control.** Unrestricted outbound DNS allows devices to bypass internal visibility — blocking external DNS resolvers is an essential hardening step.
+- **Default deny must be tested, not assumed.** Configuring a default deny rule is not enough — each VLAN must be tested to confirm isolation actually works as intended.
+- **Least privilege is harder to maintain than it sounds.** It requires knowing exactly what each device needs and resisting the temptation to create broad allow rules for convenience.
 
 ---
 
 ## 📈 Result
 
-- ✅ Least-privilege access enforced across all VLANs
-- ✅ IoT fully isolated from all internal networks
-- ✅ Management plane accessible only from Admin VLAN
+- ✅ Reduced WAN exposure — only WireGuard listener exposed
+- ✅ Secure management access — key-based SSH from Admin VLAN only
+- ✅ Strong VLAN isolation — least-privilege routing enforced across all segments
 - ✅ DNS bypass blocked — all VLANs forced through pfSense resolver
-- ✅ Default deny enforced at every VLAN interface
-- ✅ Administrative access restricted to key-based SSH from Admin VLAN only
-- ✅ Internet access preserved where operationally required
+- ✅ Hardened SSH — password authentication removed
+- ✅ Reliable remote administration through WireGuard VPN
 
-The firewall moved from a basic pass-through into a deliberate, production-style security policy.
-
----
-
-## 💡 Lessons Learned
-
-- **Rule order matters more than rule content.** A correctly written allow rule in the wrong position will silently bypass intended security controls.
-- **DNS is a security control.** Unrestricted outbound DNS allows devices to bypass internal visibility — blocking external DNS resolvers is an essential hardening step.
-- **Default deny must be tested, not assumed.** Configuring a default deny rule is not enough — each VLAN must be tested to confirm isolation actually works as intended.
-- **Least privilege is harder to maintain than it sounds.** It requires knowing exactly what each device needs and resisting the temptation to create broad allow rules for convenience.
-- **Firewall policy and VLAN design are inseparable.** The segmentation is only as strong as the rules enforcing it — a flat firewall policy with VLANs provides almost no real security benefit.
+This transformed the environment from a basic home network into a controlled infrastructure environment with production-style security design.
 
 ---
 
@@ -260,6 +245,7 @@ The firewall moved from a basic pass-through into a deliberate, production-style
 | Proxmox Setup | [01-proxmox-setup.md](01-proxmox-setup.md) |
 | pfSense Setup | [02-pfsense-setup.md](02-pfsense-setup.md) |
 | VLAN Segmentation | [03-vlan-segmentation.md](03-vlan-segmentation.md) |
+| Firewall Policy | [04-firewall-policy.md](04-firewall-policy.md) |
 | SSH Hardening | [06-ssh-hardening.md](06-ssh-hardening.md) |
 | Lessons Learned | [05-lessons-learned.md](05-lessons-learned.md) |
 
