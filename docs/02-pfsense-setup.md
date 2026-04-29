@@ -1,15 +1,10 @@
 # 🧱 pfSense Deployment & Configuration
 
-This document covers the deployment and configuration of pfSense as the central router and firewall for the home lab environment.
+This document covers the deployment, migration, and hardening of pfSense as the core network appliance for the home lab environment.
 
-pfSense was used to:
-- Route traffic between VLANs
-- Provide DHCP services per VLAN
-- Enforce firewall policies
-- Control access between network segments
-- Enable secure internet connectivity
+pfSense evolved from an internal virtual firewall behind the ISP router into the primary edge router for the entire environment, handling WAN connectivity, routing, VLAN segmentation, DHCP, firewall policy, DNS, and WireGuard remote access.
 
-This phase transformed the lab from isolated virtual machines into a fully routed, segmented, and security-focused network.
+This migration removed double-NAT, improved stability, and enabled proper enterprise-style network design.
 
 ---
 
@@ -18,11 +13,15 @@ This phase transformed the lab from isolated virtual machines into a fully route
 - [Design Objectives](#design-objectives)
 - [pfSense Deployment](#pfsense-deployment)
 - [Network Architecture Evolution](#network-architecture-evolution)
+- [WAN Migration](#wan-migration)
 - [Interface Configuration](#interface-configuration)
 - [VLAN Interface Setup](#vlan-interface-setup)
 - [DHCP Configuration](#dhcp-configuration)
 - [NAT Configuration](#nat-configuration)
+- [Firewall Policy](#firewall-policy)
 - [DNS Resolver Setup](#dns-resolver-setup)
+- [SSH Hardening](#ssh-hardening)
+- [EE Router Conversion](#ee-router-conversion)
 - [Connectivity Testing](#connectivity-testing)
 - [Issues Encountered](#issues-encountered)
 - [Result](#result)
@@ -38,13 +37,16 @@ This phase transformed the lab from isolated virtual machines into a fully route
 | Enable inter-VLAN routing | ✅ Complete |
 | Centralise firewall control | ✅ Complete |
 | Implement DHCP services per VLAN | ✅ Complete |
-| Achieve clean WAN / LAN separation | ✅ Complete |
+| Migrate pfSense to true edge router | ✅ Complete |
+| Eliminate ISP double-NAT | ✅ Complete |
+| Deploy WireGuard remote access VPN | ✅ Complete |
+| Harden DNS, SSH, and management access | ✅ Complete |
 
 ---
 
 ## 🖥️ pfSense Deployment
 
-pfSense was deployed as a virtual machine inside Proxmox VE, acting as the core control point for all network traffic.
+pfSense was deployed as a virtual machine inside Proxmox VE, acting as the central control point for all network traffic.
 
 | Role | Detail |
 |---|---|
@@ -53,37 +55,97 @@ pfSense was deployed as a virtual machine inside Proxmox VE, acting as the core 
 | DHCP Server | Per-VLAN address assignment |
 | DNS Resolver | Internal name resolution with ACLs |
 | VLAN Gateway | Default gateway for all VLAN subnets |
-| Security Boundary | Hardened administrative access |
+| WireGuard VPN | Secure remote administrative access |
+| Edge Router | Direct PPPoE connection to Openreach ONT |
 
 ---
 
 ## 🌐 Network Architecture Evolution
 
-### Phase 1 — Single NIC Design
+### Phase 1 — Internal Firewall Behind ISP Router
 
-The original deployment used a single physical NIC on the Proxmox host, requiring WAN and LAN traffic to share the same interface.
+The original deployment placed pfSense behind the EE router, creating the following constraints:
 
 | Challenge | Impact |
 |---|---|
-| Shared WAN / LAN traffic | Routing complexity |
-| VLAN-aware bridge required | More complex virtual network design |
-| Management over same path | Increased lockout risk during changes |
-| Single failure point | Harder to isolate faults during troubleshooting |
+| Double-NAT | Broken WireGuard handshakes, unreliable port forwarding |
+| ISP router limitations | Reduced routing control and visibility |
+| Shared WAN / LAN NIC | Routing complexity on Proxmox host |
+| Management over shared path | Increased lockout risk during changes |
 
-While functional, this design introduced instability that required rethinking the architecture.
+While functional for basic lab work, this design prevented proper VPN deployment and introduced unnecessary routing complexity.
 
 ---
 
 ### Phase 2 — Dual NIC Architecture Upgrade
 
-A second PCIe NIC was installed in the Proxmox host, enabling proper physical separation between WAN and LAN traffic.
+A second PCIe NIC was installed in the Proxmox host, enabling physical separation between WAN and LAN traffic.
 
-| Interface | Bridge | Role | Connected To |
+| NIC | Bridge | Role | Connected To |
 |---|---|---|---|
-| NIC 1 | `vmbr0` | WAN + Proxmox management | ISP / home router |
+| NIC 1 | `vmbr0` | WAN path | ISP router (initial) → Openreach ONT (final) |
 | NIC 2 | `vmbr1` | LAN trunk — all internal VLANs | Cisco Catalyst 2960 |
 
-This upgrade significantly improved routing clarity, management reliability, firewall architecture, and overall troubleshooting — aligning the lab with production-style infrastructure design.
+---
+
+### Phase 3 — Edge Router Migration
+
+pfSense was moved from behind the EE router to directly in front of the Openreach ONT via PPPoE.
+
+| Before | After |
+|---|---|
+| Openreach ONT → EE Router → pfSense | Openreach ONT → pfSense (PPPoE) |
+| Double-NAT | Single NAT — pfSense owns the WAN IP |
+| WireGuard handshakes failing | WireGuard stable and validated |
+| ISP router controlling routing path | pfSense as sole edge device |
+
+---
+
+## 🔄 WAN Migration
+
+### Previous Architecture
+
+```text
+Openreach ONT
+→ EE Router (NAT + DHCP)
+→ pfSense WAN
+→ Internal VLANs
+```
+
+Problems:
+- Double-NAT blocking WireGuard UDP handshakes
+- ISP router intercepting and modifying inbound traffic
+- No direct control over WAN IP assignment
+- Unreliable remote access
+
+---
+
+### Final Architecture
+
+```text
+Openreach ONT
+→ pfSense WAN (PPPoE)
+→ Cisco Catalyst 2960
+→ VLANs / Proxmox / AP / Clients
+```
+
+Benefits:
+- pfSense owns the public WAN IP directly
+- Clean single-NAT path
+- Stable WireGuard VPN
+- Full routing and firewall control at the edge
+
+---
+
+### WAN Interface Configuration
+
+| Setting | Value |
+|---|---|
+| Interface | WAN |
+| IPv4 Type | PPPoE |
+| PPPoE Username | `bthomehub@btbroadband.com` |
+| PPPoE Password | ISP credentials |
+| Result | Direct public WAN IP assigned to pfSense |
 
 ---
 
@@ -94,9 +156,8 @@ This upgrade significantly improved routing clarity, management reliability, fir
 | Setting | Value |
 |---|---|
 | Bridge | `vmbr0` → NIC 1 |
-| IP Assignment | DHCP from ISP router |
-| Typical Address | `192.168.1.x` |
-| Purpose | Internet access + upstream routing |
+| IP Assignment | PPPoE — direct from Openreach ONT |
+| Purpose | Internet access and edge routing |
 
 ---
 
@@ -104,6 +165,7 @@ This upgrade significantly improved routing clarity, management reliability, fir
 
 | Setting | Value |
 |---|---|
+| Parent Interface | `vtnet1` |
 | Bridge | `vmbr1` → NIC 2 |
 | Mode | 802.1Q trunk |
 | Purpose | Parent interface for all VLAN subinterfaces |
@@ -117,13 +179,15 @@ This upgrade significantly improved routing clarity, management reliability, fir
 
 VLAN subinterfaces were created inside pfSense on top of the LAN trunk interface, each acting as an independent routed security zone.
 
-| VLAN | Interface Name | Gateway IP | Subnet |
+| VLAN | Interface | Gateway IP | Subnet |
 |---|---|---|---|
-| VLAN 10 | Admin | `192.168.10.1` | `192.168.10.0/24` |
-| VLAN 20 | Lab | `192.168.20.1` | `192.168.20.0/24` |
-| VLAN 30 | IoT | `192.168.30.1` | `192.168.30.0/24` |
-| VLAN 40 | Users | `192.168.40.1` | `192.168.40.0/24` |
-| VLAN 99 | Management | `192.168.99.1` | `192.168.99.0/24` |
+| **VLAN 10** | Admin | `192.168.10.1` | `192.168.10.0/24` |
+| **VLAN 20** | Servers | `192.168.20.1` | `192.168.20.0/24` |
+| **VLAN 30** | IoT | `192.168.30.1` | `192.168.30.0/24` |
+| **VLAN 40** | Users / Wi-Fi | `192.168.40.1` | `192.168.40.0/24` |
+| **VLAN 99** | Management | `192.168.99.1` | `192.168.99.0/24` |
+
+All VLANs are tagged on the Cisco trunk and routed by pfSense.
 
 ---
 
@@ -134,11 +198,13 @@ DHCP was enabled individually on each VLAN interface to provide automatic IP ass
 | VLAN | DHCP Range |
 |---|---|
 | VLAN 10 — Admin | `192.168.10.100` – `192.168.10.199` |
-| VLAN 20 — Lab | `192.168.20.100` – `192.168.20.199` |
+| VLAN 20 — Servers | `192.168.20.100` – `192.168.20.199` |
 | VLAN 30 — IoT | `192.168.30.100` – `192.168.30.199` |
 | VLAN 40 — Users | `192.168.40.100` – `192.168.40.199` |
 
 > 📝 VLAN 99 (Management) uses static IP assignment only. Infrastructure devices require consistent, predictable addresses — DHCP on the management plane introduces unnecessary risk.
+
+This replaced DHCP services previously provided by the EE router.
 
 ---
 
@@ -155,6 +221,33 @@ Automatic Outbound NAT translates all internal RFC1918 traffic to the WAN IP, re
 
 ---
 
+## 🔒 Firewall Policy
+
+Implemented least-privilege access between all VLANs.
+
+### Inter-VLAN Access Rules
+
+| Rule | Detail |
+|---|---|
+| IoT isolation | VLAN 30 blocked from Admin, Management, and Servers |
+| User restrictions | VLAN 40 limited to HTTP/HTTPS outbound only |
+| Server protection | VLAN 20 blocked from user and IoT access |
+| Management isolation | VLAN 99 accessible only from trusted Admin devices |
+| pfSense GUI and SSH | Locked to VLAN 10 (Admin) only |
+| Default policy | Deny all traffic unless explicitly permitted |
+
+### WAN Security
+
+| Rule | Detail |
+|---|---|
+| Inbound access | Tightly restricted — only WireGuard UDP permitted |
+| Unnecessary services | Disabled on WAN interface |
+| Attack surface | Significantly reduced |
+
+> 📄 Full firewall policy details in [04 — Firewall Policy](04-firewall-policy.md).
+
+---
+
 ## 🔐 DNS Resolver Setup
 
 | Setting | Value |
@@ -165,9 +258,50 @@ Automatic Outbound NAT translates all internal RFC1918 traffic to the WAN IP, re
 | DNSSEC | Enabled |
 | External DNS bypass | Blocked via firewall rules |
 
-Forcing all VLANs to use the internal resolver prevents devices from bypassing security controls by pointing to external DNS servers. This became a key part of the security hardening phase.
+Forcing all VLANs to use the internal resolver prevents devices from bypassing security controls by pointing to external DNS servers.
 
-> 📄 Full DNS and firewall policy details in [04 — Firewall Policy](04-firewall-policy.md).
+---
+
+## 🔑 SSH Hardening
+
+| Setting | Value |
+|---|---|
+| Authentication method | RSA 4096-bit public key only |
+| Password authentication | Disabled entirely |
+| SSH access scope | Restricted to Admin VLAN 10 only |
+
+> 📄 Full details in [06 — SSH Hardening](06-ssh-hardening.md).
+
+---
+
+## 📶 EE Router Conversion
+
+After pfSense was moved to the network edge, the EE Hub was repurposed as a Wi-Fi access point only.
+
+### Previous Role
+
+```text
+EE Hub: router + NAT + DHCP + Wi-Fi
+```
+
+### New Role
+
+```text
+EE Hub: Wi-Fi access point only
+→ Connected to VLAN 40 access port on Cisco switch
+→ DHCP disabled
+→ Static management IP assigned
+→ NAT and routing role removed
+```
+
+| Change | Detail |
+|---|---|
+| DHCP | Disabled — pfSense provides DHCP for VLAN 40 |
+| NAT | Removed — pfSense handles all NAT at the edge |
+| Wi-Fi | Retained for household user devices |
+| Connection | Switch VLAN 40 access port → EE Hub LAN port |
+
+This preserved full household Wi-Fi connectivity while eliminating double-NAT and ISP router interference.
 
 ---
 
@@ -182,65 +316,78 @@ After each configuration change, the following tests were performed to validate 
 | Internet access | Ping `8.8.8.8` | Response from Google DNS |
 | DNS resolution | Resolve `google.com` | IP returned successfully |
 | DHCP lease | Connect device to VLAN | IP assigned from correct range |
-| Proxmox management | Access web UI post-changes | `https://<proxmox-ip>:8006` reachable |
+| WireGuard tunnel | Handshake + remote SSH | Validated over mobile hotspot |
+| Proxmox management | Access web UI post-changes | `https://192.168.10.200:8006` reachable |
 
 ---
 
 ## ⚠️ Issues Encountered
 
-### 1. No WAN IP — DHCP Failure
+### 1. WireGuard Handshake Failures
 
 | Field | Detail |
 |---|---|
-| **Problem** | pfSense not receiving WAN IP from ISP router |
+| **Problem** | WireGuard tunnel failing to establish — no handshake |
+| **Cause** | ISP router double-NAT intercepting inbound UDP traffic |
+| **Resolution** | Moved pfSense directly to ONT via PPPoE — eliminated ISP router from WAN path |
+
+---
+
+### 2. No WAN IP — PPPoE Failure
+
+| Field | Detail |
+|---|---|
+| **Problem** | pfSense not receiving WAN IP after migration to ONT |
 | **Cause** | Incorrect interface mapping — WAN assigned to wrong bridge |
-| **Resolution** | Reassigned WAN interface to `vmbr0` and validated upstream connectivity |
+| **Resolution** | Reassigned WAN interface to `vmbr0` and validated PPPoE credentials |
 
 ---
 
-### 2. NO-CARRIER Interface Errors
+### 3. VLAN Gateway Failures
 
 | Field | Detail |
 |---|---|
-| **Problem** | Interfaces showing `NO-CARRIER` — no link established |
-| **Cause** | Incorrect bridge assignment; virtual NIC not mapped to correct `vmbr` |
-| **Resolution** | Verified NIC attachment in Proxmox and corrected bridge mapping |
+| **Problem** | Inter-VLAN traffic not routing — VLAN gateways unreachable |
+| **Cause** | Trunk port configured on wrong switch interface; incorrect pfSense LAN parent interface |
+| **Resolution** | Validated physical switch connections and corrected trunk placement |
+
+> 💡 **Key insight:** Always verify Layer 1 physical connectivity before attempting Layer 2 or Layer 3 troubleshooting.
 
 ---
 
-### 3. VLAN Routing Failure
+### 4. FastEthernet Trunk Bottleneck
 
 | Field | Detail |
 |---|---|
-| **Problem** | Inter-VLAN traffic not routing correctly |
-| **Cause** | Trunk port configured on wrong switch interface; incorrect pfSense LAN path |
-| **Resolution** | Validated physical switch connections and corrected trunk placement on `Fa0/1` |
-
-> 💡 This reinforced the importance of verifying Layer 1 physical connectivity before attempting Layer 2 or Layer 3 troubleshooting.
+| **Problem** | Poor Wi-Fi throughput and inter-VLAN performance |
+| **Cause** | Critical trunk running on `Fa0/1` (100Mbps) with heavy CRC errors |
+| **Resolution** | Migrated trunk to GigabitEthernet interface — restored full throughput |
 
 ---
 
-### 4. WebGUI Access Failure
+### 5. WebGUI Access Failure
 
 | Field | Detail |
 |---|---|
-| **Problem** | pfSense web UI inaccessible after VLAN redesign |
-| **Cause** | Browser session corruption following management access changes |
+| **Problem** | pfSense web UI inaccessible after management access changes |
+| **Cause** | Browser session corruption following GUI protocol and VLAN changes |
 | **Resolution** | Cleared browser site data and restarted pfSense GUI services |
 
-> 💡 This demonstrated that authentication and access failures are not always network or firewall problems — application state can mimic infrastructure issues.
+> 💡 **Key insight:** Authentication and access failures are not always network or firewall problems — application state can mimic infrastructure issues.
 
 ---
 
 ## 📈 Result
 
+- ✅ pfSense operating as true edge router with direct PPPoE WAN
 - ✅ Stable internet access across all VLANs
-- ✅ Reliable inter-VLAN routing via pfSense
-- ✅ Clean WAN / LAN separation via dual NIC design
-- ✅ Centralised firewall enforcement across all segments
+- ✅ Reliable inter-VLAN routing with least-privilege firewall enforcement
 - ✅ DHCP operational per VLAN with static ranges preserved
-- ✅ DNS Resolver serving all networks with ACL enforcement
-- ✅ Reduced management risk through architectural separation
+- ✅ DNS Resolver serving all networks with ACL and DNSSEC enforcement
+- ✅ WireGuard VPN stable and validated from external network
+- ✅ EE Hub repurposed as access point — double-NAT eliminated
+- ✅ SSH hardened to public key authentication only
+- ✅ pfSense GUI and SSH access locked to Admin VLAN
 
 pfSense moved from a functional lab router into a production-style network security platform.
 
@@ -248,11 +395,23 @@ pfSense moved from a functional lab router into a production-style network secur
 
 ## 💡 Lessons Learned
 
-- **Single-NIC designs create avoidable complexity.** The dual NIC upgrade removed an entire class of routing and management problems — hardware investment pays off in architectural clarity.
+- **ISP routers impose hidden constraints.** Moving pfSense to the edge removed an entire class of problems — NAT traversal, VPN handshakes, and routing stability all improved immediately.
+- **Single-NIC designs create avoidable complexity.** The dual NIC upgrade removed routing and management problems that software configuration alone could not resolve.
 - **Physical connectivity must be verified before logical troubleshooting.** Several issues that looked like routing failures traced directly back to incorrect physical port assumptions.
-- **Stable management access must come before hardening.** Locking yourself out of pfSense mid-configuration is a real operational risk — always verify the management path before making network changes.
+- **Stable management access must come before hardening.** Locking yourself out of pfSense mid-configuration is a real operational risk — always verify the management path before making changes.
 - **Browser state can mimic network failures.** A corrupted session can look exactly like a firewall or authentication problem — clear application state before assuming infrastructure is broken.
-- **WAN / LAN separation dramatically improves the design.** Dedicated interfaces are not just a performance improvement — they are a security and operational boundary.
+- **Access point conversion is straightforward but sequencing matters.** Disabling DHCP on the EE Hub before pfSense was ready to serve VLAN 40 would have cut off household Wi-Fi — plan the migration order carefully.
+
+---
+
+## 🗺️ Future Improvements
+
+- [ ] Dynamic DNS deployment
+- [ ] IDS/IPS — Suricata or Snort
+- [ ] Monitoring stack integration — Grafana / Zabbix
+- [ ] Centralised logging and Syslog
+- [ ] Backup validation and recovery testing
+- [ ] Formal network diagrams
 
 ---
 
@@ -263,6 +422,7 @@ pfSense moved from a functional lab router into a production-style network secur
 | Proxmox Setup | [01-proxmox-setup.md](01-proxmox-setup.md) |
 | VLAN Segmentation | [03-vlan-segmentation.md](03-vlan-segmentation.md) |
 | Firewall Policy | [04-firewall-policy.md](04-firewall-policy.md) |
+| SSH Hardening | [06-ssh-hardening.md](06-ssh-hardening.md) |
 | Cisco Switch Config | [cisco-2960-switch-config.md](../configs/cisco-2960-switch-config.md) |
 
 ---
