@@ -1,4 +1,4 @@
-# 🖥️ Home Lab Network Infrastructure
+# 🖥️ Home Lab Network Infrastructure 
 
 ### Proxmox • pfSense • Cisco Catalyst 2960 • VLAN Segmentation • WireGuard VPN • Network Security
 
